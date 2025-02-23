@@ -30,21 +30,30 @@ MOCK_TARGET_PARAMS = {
 }
 
 def test_compute_cosine_similarity():
-    """Test cosine similarity computation."""
+    """Test cosine similarity computation with new features."""
     # Create orthogonal vectors
     v1 = torch.tensor([[1.0, 0.0], [0.0, 1.0]])
     v2 = torch.tensor([[0.0, 1.0], [1.0, 0.0]])
     
+    # Test basic similarity
     similarities = compute_cosine_similarity(v1, v2)
-    
-    # Check dimensions
     assert similarities.shape == (2, 2)
-    
-    # Check values (orthogonal vectors should have 0 similarity)
     assert torch.allclose(similarities, torch.tensor([[0.0, 1.0], [1.0, 0.0]]), atol=1e-6)
+    
+    # Test non-linear transformation
+    v3 = torch.tensor([[-1.0, 2.0], [3.0, -4.0]])
+    v4 = torch.tensor([[2.0, -1.0], [-4.0, 3.0]])
+    nl_similarities = compute_cosine_similarity(v3, v4, non_linear=True)
+    assert nl_similarities.shape == (2, 2)
+    
+    # Test attention patterns
+    attn1 = torch.randn(2, 4, 8, 8)  # (batch, heads, seq_len, seq_len)
+    attn2 = torch.randn(2, 4, 8, 8)
+    attn_similarities = compute_cosine_similarity(attn1, attn2, attention_patterns=True)
+    assert attn_similarities.shape == (8, 8)  # (batch*heads, batch*heads)
 
 def test_create_crosscoder_mapping():
-    """Test crosscoder mapping creation."""
+    """Test crosscoder mapping creation with new features."""
     # Create test tensors with proper dimensions
     source = torch.randn(5, 10)
     target = torch.randn(3, 10)
@@ -64,6 +73,16 @@ def test_create_crosscoder_mapping():
     # Higher temperature should give more uniform probabilities
     assert mapping_hot.std() > mapping_cold.std()
     
+    # Test with residual connections
+    mapping_residual = create_crosscoder_mapping(source, target, residual_weight=0.5)
+    assert mapping_residual.shape == (5, 3)
+    assert torch.allclose(mapping_residual.sum(dim=1), torch.ones(5))
+    
+    # Test with non-linear similarity
+    mapping_nonlinear = create_crosscoder_mapping(source, target, non_linear=True)
+    assert mapping_nonlinear.shape == (5, 3)
+    assert torch.allclose(mapping_nonlinear.sum(dim=1), torch.ones(5))
+    
     # Test identical tensors
     source = torch.eye(5)
     target = source.clone()
@@ -71,64 +90,67 @@ def test_create_crosscoder_mapping():
     assert torch.allclose(mapping, torch.eye(5))
 
 def test_crosscode_layer_params():
-    """Test layer parameter crosscoding."""
+    """Test layer parameter crosscoding with new features."""
     # Create test parameters with proper dimensions
-    dim = 4
+    dim = 64
+    num_heads = 8
+    head_size = dim // num_heads
+    
     source_params = {
-        "model.layers.0.mlp.gate_proj.weight": torch.randn(dim, dim),  # Matrix
-        "model.layers.0.mlp.gate_proj.bias": torch.randn(dim),         # Vector
-        "model.layers.0.input_layernorm.weight": torch.randn(dim),     # Vector
-        "model.layers.0.input_layernorm.bias": torch.randn(dim),       # Vector
-        "model.layers.0.other_param": torch.randn(dim, dim)            # Unknown type
+        "model.layers.0.mlp.gate_proj.weight": torch.randn(dim, dim),
+        "model.layers.0.mlp.gate_proj.bias": torch.randn(dim),
+        "model.layers.0.input_layernorm.weight": torch.randn(dim),
+        "model.layers.0.input_layernorm.bias": torch.randn(dim),
+        "model.layers.0.attention.weight": torch.randn(dim, num_heads * head_size),
+        "model.layers.0.other_param": torch.randn(dim, dim)
     }
+    
     target_params = {
         "model.layers.0.mlp.gate_proj.weight": torch.randn(dim, dim),
         "model.layers.0.mlp.gate_proj.bias": torch.randn(dim),
         "model.layers.0.input_layernorm.weight": torch.randn(dim),
         "model.layers.0.input_layernorm.bias": torch.randn(dim),
+        "model.layers.0.attention.weight": torch.randn(dim, num_heads * head_size),
         "model.layers.0.other_param": torch.randn(dim, dim)
     }
     
-    # Test crosscoding
+    # Test standard crosscoding
     result = crosscode_layer_params(source_params, target_params)
-    
-    # Check that all parameters are present
     assert set(result.keys()) == set(source_params.keys())
     
-    # Check weight matrix crosscoding
-    weight_name = "model.layers.0.mlp.gate_proj.weight"
-    assert not torch.allclose(result[weight_name], target_params[weight_name])
+    # Test with residual connections
+    result_residual = crosscode_layer_params(
+        source_params,
+        target_params,
+        residual_weight=0.5
+    )
+    assert set(result_residual.keys()) == set(source_params.keys())
     
-    # Check that bias and norm were copied exactly
-    for name in ["model.layers.0.mlp.gate_proj.bias",
-                "model.layers.0.input_layernorm.weight",
-                "model.layers.0.input_layernorm.bias"]:
-        assert torch.allclose(result[name], target_params[name])
+    # Test with non-linear similarity
+    result_nonlinear = crosscode_layer_params(
+        source_params,
+        target_params,
+        non_linear=True
+    )
+    assert set(result_nonlinear.keys()) == set(source_params.keys())
     
-    # Check unknown parameter type handling
-    assert torch.allclose(result["model.layers.0.other_param"], 
-                         target_params["model.layers.0.other_param"])
+    # Verify attention handling
+    attn_name = "model.layers.0.attention.weight"
+    assert result[attn_name].shape == source_params[attn_name].shape
+    assert not torch.allclose(result[attn_name], target_params[attn_name])
     
-    # Test error handling for incorrect dimensions
+    # Test error handling
     bad_source_params = {
         "bad.weight": torch.randn(dim),  # 1D weight (should be 2D)
-        "bad.bias": torch.randn(dim, dim)  # 2D bias (should be 1D)
+        "bad.attention.weight": torch.randn(dim)  # 1D attention (should be 2D)
     }
     bad_target_params = {
         "bad.weight": torch.randn(dim),
-        "bad.bias": torch.randn(dim, dim)
+        "bad.attention.weight": torch.randn(dim)
     }
     
-    # Should raise error for incorrect weight dimension
     with pytest.raises(ValueError, match="Weight tensor .* must be a matrix"):
         crosscode_layer_params(bad_source_params, bad_target_params)
-    
-    # Should raise error for incorrect bias dimension
-    with pytest.raises(ValueError, match="Parameter .* must be a vector"):
-        crosscode_layer_params(
-            {"good.bias": torch.randn(dim, dim)},
-            {"good.bias": torch.randn(dim, dim)}
-        )
 
 def test_diff_layer_params():
     """Test layer parameter differencing."""

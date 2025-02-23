@@ -3,6 +3,8 @@ Crosscoder implementation for model diffing.
 
 This module implements the crosscoder approach described in:
 https://transformer-circuits.pub/2024/crosscoders/index.html
+with updates from:
+https://transformer-circuits.pub/2025/january-update/index.html
 
 The implementation uses functional programming principles for clarity and composability.
 Each function is pure and handles a specific part of the crosscoding process.
@@ -18,13 +20,18 @@ from ..loader.load import load_model_layer, get_layer_names
 def compute_cosine_similarity(
     tensor1: torch.Tensor,
     tensor2: torch.Tensor,
+    non_linear: bool = False,
+    attention_patterns: bool = False,
 ) -> torch.Tensor:
     """
-    Compute cosine similarity between two tensors.
+    Compute cosine similarity between two tensors with support for non-linear transformations
+    and attention patterns.
     
     Args:
         tensor1: First tensor of shape (D1, D2)
         tensor2: Second tensor of shape (D1, D2)
+        non_linear: Whether to apply non-linear transformation before comparison
+        attention_patterns: Whether tensors represent attention patterns
         
     Returns:
         Cosine similarity matrix
@@ -34,7 +41,22 @@ def compute_cosine_similarity(
         tensor1 = tensor1.unsqueeze(0)
     if tensor2.dim() == 1:
         tensor2 = tensor2.unsqueeze(0)
+    
+    if non_linear:
+        # Apply non-linear transformation (ReLU followed by normalization)
+        tensor1 = F.relu(tensor1)
+        tensor2 = F.relu(tensor2)
         
+    if attention_patterns:
+        # For attention patterns, we need to handle the head dimension specially
+        # Reshape: (batch, heads, seq_len, seq_len) -> (batch * heads, seq_len * seq_len)
+        if tensor1.dim() == 4:
+            b, h, s1, s2 = tensor1.shape
+            tensor1 = tensor1.view(b * h, s1 * s2)
+        if tensor2.dim() == 4:
+            b, h, s1, s2 = tensor2.shape
+            tensor2 = tensor2.view(b * h, s1 * s2)
+    
     # Normalize tensors along last dimension
     tensor1_normalized = F.normalize(tensor1, p=2, dim=-1)
     tensor2_normalized = F.normalize(tensor2, p=2, dim=-1)
@@ -47,6 +69,9 @@ def create_crosscoder_mapping(
     target_tensor: torch.Tensor,
     temperature: float = 1.0,
     threshold: float = 0.9999,  # Threshold for considering tensors identical
+    residual_weight: float = 0.1,  # Weight for residual connections
+    non_linear: bool = False,  # Whether to use non-linear similarity
+    attention_patterns: bool = False,  # Whether these are attention patterns
 ) -> torch.Tensor:
     """
     Create a crosscoder mapping between source and target tensors.
@@ -56,22 +81,50 @@ def create_crosscoder_mapping(
         target_tensor: Target tensor of shape (M, D)
         temperature: Temperature for softmax scaling
         threshold: Cosine similarity threshold for identical features
+        residual_weight: Weight for residual connections in similarity computation
+        non_linear: Whether to use non-linear similarity metrics
+        attention_patterns: Whether these are attention patterns
         
     Returns:
         Mapping matrix of shape (N, M)
     """
-    # Compute similarities
-    similarities = compute_cosine_similarity(source_tensor, target_tensor)
+    # Compute direct similarities
+    similarities = compute_cosine_similarity(
+        source_tensor, 
+        target_tensor,
+        non_linear=non_linear,
+        attention_patterns=attention_patterns
+    )
+    
+    if residual_weight > 0:
+        # Compute residual similarities (similarity after subtracting mean)
+        source_residual = source_tensor - source_tensor.mean(dim=0, keepdim=True)
+        target_residual = target_tensor - target_tensor.mean(dim=0, keepdim=True)
+        
+        residual_similarities = compute_cosine_similarity(
+            source_residual,
+            target_residual,
+            non_linear=non_linear,
+            attention_patterns=attention_patterns
+        )
+        
+        # Combine direct and residual similarities
+        similarities = (1 - residual_weight) * similarities + residual_weight * residual_similarities
     
     # Check if tensors are effectively identical
-    if torch.all(torch.abs(similarities - torch.eye(*similarities.shape, device=similarities.device)) < (1 - threshold)):
-        return torch.eye(*similarities.shape, device=similarities.device)
+    if similarities.size(0) == similarities.size(1):  # Square matrix
+        diag_sim = torch.diagonal(similarities)
+        if torch.all(diag_sim > threshold):
+            # Use very low temperature for nearly identical tensors
+            temperature = 0.01
     
     # Apply temperature scaling
     scaled_similarities = similarities / temperature
     
-    # Convert to probabilities
-    return F.softmax(scaled_similarities, dim=-1)
+    # Convert to probabilities with stability improvements
+    max_sim = scaled_similarities.max(dim=-1, keepdim=True)[0]
+    exp_similarities = torch.exp(scaled_similarities - max_sim)
+    return exp_similarities / exp_similarities.sum(dim=-1, keepdim=True)
 
 def compute_parameter_difference(
     tensor1: torch.Tensor,
@@ -131,6 +184,8 @@ def crosscode_layer_params(
     source_params: Dict[str, torch.Tensor],
     target_params: Dict[str, torch.Tensor],
     mapping_fn: Optional[Callable[[torch.Tensor, torch.Tensor], torch.Tensor]] = None,
+    residual_weight: float = 0.1,
+    non_linear: bool = False,
 ) -> Dict[str, torch.Tensor]:
     """
     Apply crosscoding between corresponding layer parameters.
@@ -139,6 +194,8 @@ def crosscode_layer_params(
         source_params: Dictionary of source parameter tensors
         target_params: Dictionary of target parameter tensors
         mapping_fn: Optional custom mapping function
+        residual_weight: Weight for residual connections
+        non_linear: Whether to use non-linear similarity metrics
         
     Returns:
         Dictionary of crosscoded parameters
@@ -165,22 +222,56 @@ def crosscode_layer_params(
             # Copy these parameters directly
             result[param_name] = target_tensor.clone()
             
+        elif 'attention' in param_name and 'weight' in param_name:
+            # Handle attention weights specially
+            if source_tensor.dim() != 2 or target_tensor.dim() != 2:
+                raise ValueError(f"Attention weight tensor {param_name} must be a matrix")
+                
+            # For attention, we need to consider head structure
+            # Reshape: (hidden_size, num_heads * head_size) -> (num_heads, head_size, hidden_size)
+            hidden_size = source_tensor.size(0)
+            num_heads = source_tensor.size(1) // (hidden_size // 32)  # Infer num_heads from dimensions
+            head_size = hidden_size // num_heads
+            
+            # Reshape tensors to expose head structure
+            source_reshaped = source_tensor.t().reshape(num_heads, head_size, hidden_size)
+            target_reshaped = target_tensor.t().reshape(num_heads, head_size, hidden_size)
+            
+            # Apply crosscoding per attention head
+            mapping = mapping_fn(
+                source_reshaped.reshape(num_heads, -1),
+                target_reshaped.reshape(num_heads, -1),
+                residual_weight=residual_weight,
+                non_linear=non_linear,
+                attention_patterns=True
+            )
+            
+            # Apply mapping and reshape back
+            mapped = torch.mm(mapping, target_reshaped.reshape(num_heads, -1))
+            result[param_name] = mapped.reshape(num_heads, head_size, hidden_size).permute(2, 0, 1).reshape(hidden_size, -1)
+            
         elif 'mlp' in param_name and 'weight' in param_name:
             # MLP weight matrices
             if source_tensor.dim() != 2 or target_tensor.dim() != 2:
                 raise ValueError(f"MLP weight tensor {param_name} must be a matrix")
                 
-            # Apply crosscoding
-            mapping = mapping_fn(source_tensor, target_tensor)
+            # Apply crosscoding with residual connections and non-linear metrics
+            mapping = mapping_fn(
+                source_tensor,
+                target_tensor,
+                residual_weight=residual_weight,
+                non_linear=non_linear
+            )
             result[param_name] = torch.mm(mapping, target_tensor)
             
         elif 'weight' in param_name:
-            # Other weight tensors (attention, etc)
+            # Other weight tensors
             if source_tensor.dim() != 2 or target_tensor.dim() != 2:
                 raise ValueError(f"Weight tensor {param_name} must be a matrix")
                 
-            # Copy these parameters directly
-            result[param_name] = target_tensor.clone()
+            # Apply standard crosscoding
+            mapping = mapping_fn(source_tensor, target_tensor)
+            result[param_name] = torch.mm(mapping, target_tensor)
             
         else:
             # Unknown parameters - copy as is
