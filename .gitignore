@@ -169,3 +169,13 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# PyTorch model weights
+*.pt
+*.pth
+*.ckpt
+weights/*.pt
+weights/*.pth
+
+# Model cache directory
+model_cache/
