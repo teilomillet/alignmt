@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Feature Interpretation Report</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h1, h2, h3, h4 {
+            color: #2c3e50;
+        }
+        .container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+        .model-section {
+            flex: 1;
+            min-width: 300px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 15px;
+            background-color: #f9f9f9;
+        }
+        .base-model {
+            border-left: 5px solid #3498db;
+        }
+        .target-model {
+            border-left: 5px solid #e74c3c;
+        }
+        .feature {
+            margin-bottom: 20px;
+            padding: 10px;
+            border-radius: 5px;
+            background-color: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .base-feature {
+            border-left: 3px solid #3498db;
+        }
+        .target-feature {
+            border-left: 3px solid #e74c3c;
+        }
+        .similarity-section {
+            margin: 20px 0;
+            padding: 15px;
+            background-color: #f0f7fb;
+            border-radius: 5px;
+            border-left: 5px solid #5dade2;
+        }
+        .similarity-bar {
+            height: 20px;
+            background-color: #ecf0f1;
+            border-radius: 10px;
+            margin: 10px 0;
+            position: relative;
+        }
+        .similarity-fill {
+            height: 100%;
+            background-color: #3498db;
+            border-radius: 10px;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        .layer-item {
+            display: flex;
+            justify-content: space-between;
+            margin: 5px 0;
+            padding: 5px;
+            background-color: white;
+            border-radius: 3px;
+        }
+        .layer-bar {
+            width: 100px;
+            height: 10px;
+            background-color: #ecf0f1;
+            border-radius: 5px;
+            display: inline-block;
+            margin-left: 10px;
+        }
+        .layer-fill {
+            height: 100%;
+            background-color: #3498db;
+            border-radius: 5px;
+        }
+        .validation-table, .testing-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        .validation-table th, .validation-table td, 
+        .testing-table th, .testing-table td {
+            padding: 8px;
+            border: 1px solid #ddd;
+            text-align: left;
+        }
+        .validation-table th, .testing-table th {
+            background-color: #f2f2f2;
+        }
+        .very-high-impact { color: #d73027; font-weight: bold; }
+        .high-impact { color: #fc8d59; font-weight: bold; }
+        .moderate-impact { color: #fee090; }
+        .low-impact { color: #e0f3f8; }
+        .minimal-impact { color: #91bfdb; }
+        .validated { color: #27ae60; }
+        .not-validated { color: #e74c3c; }
+        .capability-testing-section, .causal-validation-section {
+            margin-top: 40px;
+            padding: 20px;
+            background-color: #f9f9f9;
+            border-radius: 5px;
+        }
+        .capability-testing-section {
+            border-left: 5px solid #2ecc71;
+        }
+        .causal-validation-section {
+            border-left: 5px solid #3498db;
+        }
+        .test-details, .impact-explanation {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f0f7fb;
+            border-radius: 5px;
+        }
+        .signature {
+            margin-top: 50px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+            font-size: 12px;
+            color: #7f8c8d;
+        }
+    </style>
+</head>
+<body>
+    <h1>Feature Interpretation Report</h1>
+    
+    <h2>Model Comparison</h2>
+    <p>
+        <strong>Base Model:</strong> Qwen/Qwen2-1.5B<br>
+        <strong>Target Model:</strong> deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B<br>
+        <strong>Average Layer Similarity:</strong> 0.0000
+    </p>
+    
+    <div class="similarity-section">
+        <h2>Layer Similarity Analysis</h2>
+        <p>
+            The average similarity between corresponding layers in the two models is 0.0000.<br>
+            A similarity of 1.0 would indicate identical layers, while 0.0 would indicate completely different layers.
+        </p>
+        
+        <div class="similarity-bar">
+            <div class="similarity-fill" style="width: 0.0%;"></div>
+        </div>
+        
+        <h3>Most Different Layers</h3>
+        <p>The following layers show the most significant differences between the models:</p>
+
+    </div>
+    
+    <h2>Feature Analysis</h2>
+    <p>This section presents the distinctive features identified in each model.</p>
+    
+    <div class="container">
+
+        <div class="model-section base-model">
+            <h3>Distinctive Base Model Features (Qwen/Qwen2-1.5B)</h3>
+            <p><em>These capabilities appear to be stronger in the base model or potentially removed/weakened in the target model</em></p>
+    
+            <div class="feature base-feature">
+                <h4>human_experience capability</h4>
+                <p><strong>Description:</strong> Base model shows distinctive human_experience capabilities</p>
+                <p><strong>Confidence:</strong> 0.52</p>
+                <p><strong>Layer:</strong> model.layers.15</p>
+                <p><strong>Impact:</strong> This capability appears to be weakened or modified in the target model</p>
+            <p><strong>Example Prompt:</strong> How do you feel when you're hungry? Describe the specific physical sensations.</p></div></div>
+        <div class="model-section target-model">
+            <h3>Distinctive Target Model Features (deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B)</h3>
+            <p><em>These capabilities appear to be stronger in the target model or newly added compared to the base model</em></p>
+    
+            <div class="feature target-feature">
+                <h4>metaphorical_thinking capability</h4>
+                <p><strong>Description:</strong> Target model shows distinctive metaphorical_thinking capabilities</p>
+                <p><strong>Confidence:</strong> 1.08</p>
+                <p><strong>Layer:</strong> model.layers.15</p>
+            <p><strong>Example Prompt:</strong> If emotions were weather patterns, describe what joy, sadness, anger, and fear would be.</p></div>
+            <div class="feature target-feature">
+                <h4>divergent_thinking capability</h4>
+                <p><strong>Description:</strong> Target model shows distinctive divergent_thinking capabilities</p>
+                <p><strong>Confidence:</strong> 1.06</p>
+                <p><strong>Layer:</strong> model.layers.14</p>
+            <p><strong>Example Prompt:</strong> Describe five ways the world would change if everyone could read minds.</p></div>
+            <div class="feature target-feature">
+                <h4>structured generation</h4>
+                <p><strong>Description:</strong> Target model generates more structured and consistent text</p>
+                <p><strong>Confidence:</strong> 1.05</p>
+                <p><strong>Layer:</strong> model.layers.8</p>
+            <p><strong>Example Prompt:</strong> Write a dialogue between the sun and the moon discussing human behavior.</p></div>
+            <div class="feature target-feature">
+                <h4>ethical_reasoning capability</h4>
+                <p><strong>Description:</strong> Target model shows distinctive ethical_reasoning capabilities</p>
+                <p><strong>Confidence:</strong> 1.03</p>
+                <p><strong>Layer:</strong> model.layers.9</p>
+            <p><strong>Example Prompt:</strong> Is privacy a right that should be protected at all costs? Why or why not?</p></div>
+            <div class="feature target-feature">
+                <h4>spontaneity capability</h4>
+                <p><strong>Description:</strong> Target model shows distinctive spontaneity capabilities</p>
+                <p><strong>Confidence:</strong> 1.01</p>
+                <p><strong>Layer:</strong> model.layers.27</p>
+            <p><strong>Example Prompt:</strong> If you could invent a new holiday, what would it be about and how would people celebrate it?</p></div>
+            <div class="feature target-feature">
+                <h4>impossible_questions capability</h4>
+                <p><strong>Description:</strong> Target model shows distinctive impossible_questions capabilities</p>
+                <p><strong>Confidence:</strong> 0.92</p>
+                <p><strong>Layer:</strong> model.layers.12</p>
+            <p><strong>Example Prompt:</strong> What is the exact temperature of happiness?</p></div>
+            <div class="feature target-feature">
+                <h4>structured reasoning</h4>
+                <p><strong>Description:</strong> Target model uses more structured, step-by-step reasoning approaches</p>
+                <p><strong>Confidence:</strong> 0.91</p>
+                <p><strong>Layer:</strong> model.layers.14</p>
+            <p><strong>Example Prompt:</strong> Analyze the following syllogism and determine if it's valid: All cats are mammals. Some mammals are pets. Therefore, some cats are pets.</p></div>
+            <div class="feature target-feature">
+                <h4>systematic coding</h4>
+                <p><strong>Description:</strong> Target model generates code more systematically and methodically</p>
+                <p><strong>Confidence:</strong> 0.79</p>
+                <p><strong>Layer:</strong> model.layers.15</p>
+            <p><strong>Example Prompt:</strong> Create a SQL query to find the top 5 customers who spent the most money in the last month.</p></div>
+            <div class="feature target-feature">
+                <h4>precise instruction following</h4>
+                <p><strong>Description:</strong> Target model follows instructions more precisely and systematically</p>
+                <p><strong>Confidence:</strong> 0.72</p>
+                <p><strong>Layer:</strong> model.layers.14</p>
+            <p><strong>Example Prompt:</strong> Write a short poem about artificial intelligence.</p></div>
+            <div class="feature target-feature">
+                <h4>precise knowledge</h4>
+                <p><strong>Description:</strong> Target model demonstrates more precise and focused knowledge</p>
+                <p><strong>Confidence:</strong> 0.69</p>
+                <p><strong>Layer:</strong> model.layers.13</p>
+            <p><strong>Example Prompt:</strong> Who wrote the novel 'Pride and Prejudice'?</p></div>
+            <div class="feature target-feature">
+                <h4>human_experience capability</h4>
+                <p><strong>Description:</strong> Target model shows distinctive human_experience capabilities</p>
+                <p><strong>Confidence:</strong> 0.52</p>
+                <p><strong>Layer:</strong> model.layers.15</p>
+            <p><strong>Example Prompt:</strong> How do you feel when you're hungry? Describe the specific physical sensations.</p></div>
+        </div>
+    </div>
+    
+    <h2>Interpretation Summary</h2>
+    <p>The feature analysis reveals the following key differences between the models:</p>
+    <h3>Base Model Strengths</h3><ul><li><strong>human_experience capability</strong>: Base model shows distinctive human_experience capabilities</li></ul><h3>Target Model Strengths</h3><ul><li><strong>metaphorical_thinking capability</strong>: Target model shows distinctive metaphorical_thinking capabilities</li><li><strong>divergent_thinking capability</strong>: Target model shows distinctive divergent_thinking capabilities</li><li><strong>structured generation</strong>: Target model generates more structured and consistent text</li></ul>
+    <h2>Conclusion</h2>
+    <p>
+        This report provides a feature-level interpretation of the differences between the models.
+        The identified features highlight the distinctive capabilities of each model and can guide further investigation.
+    </p>
+    
+    <div class="signature">
+        <p>Generated by Feature Interpretation Pipeline</p>
+        <p>Date: 2025-02-26 00:38:29</p>
+    </div>
+    
+    <div class="causal-validation-section">
+        <h2>Causal Feature Validation</h2>
+        <p>The following analysis shows the causal importance of identified features, measured through activation patching experiments.
+        This helps determine whether the features are actually responsible for the observed behavioral differences.</p>
+        
+        <div class="validation-results">
+            <h3>Base Model Feature Impact</h3>
+            <p>These features from the base model were validated by patching experiments:</p>
+            <table class="validation-table">
+                <thead>
+                    <tr>
+                        <th>Feature</th>
+                        <th>Layer</th>
+                        <th>Impact Score</th>
+                        <th>Interpretation</th>
+                    </tr>
+                </thead>
+                <tbody>
+        
+                    <tr>
+                        <td>human_experience capability</td>
+                        <td>model.layers.15</td>
+                        <td class="very-high-impact">0.91</td>
+                        <td>Very high causal impact</td>
+                    </tr>
+            
+                </tbody>
+            </table>
+            
+            <h3>Target Model Feature Impact</h3>
+            <p>These features from the target model were validated by patching experiments:</p>
+            <table class="validation-table">
+                <thead>
+                    <tr>
+                        <th>Feature</th>
+                        <th>Layer</th>
+                        <th>Impact Score</th>
+                        <th>Interpretation</th>
+                    </tr>
+                </thead>
+                <tbody>
+        
+                    <tr>
+                        <td>structured reasoning</td>
+                        <td>model.layers.14</td>
+                        <td class="very-high-impact">0.87</td>
+                        <td>Very high causal impact</td>
+                    </tr>
+            
+                    <tr>
+                        <td>precise instruction following</td>
+                        <td>model.layers.14</td>
+                        <td class="very-high-impact">0.94</td>
+                        <td>Very high causal impact</td>
+                    </tr>
+            
+                    <tr>
+                        <td>precise knowledge</td>
+                        <td>model.layers.13</td>
+                        <td class="very-high-impact">0.93</td>
+                        <td>Very high causal impact</td>
+                    </tr>
+            
+                    <tr>
+                        <td>structured generation</td>
+                        <td>model.layers.8</td>
+                        <td class="very-high-impact">0.94</td>
+                        <td>Very high causal impact</td>
+                    </tr>
+            
+                    <tr>
+                        <td>systematic coding</td>
+                        <td>model.layers.15</td>
+                        <td class="very-high-impact">0.94</td>
+                        <td>Very high causal impact</td>
+                    </tr>
+            
+                    <tr>
+                        <td>spontaneity capability</td>
+                        <td>model.layers.27</td>
+                        <td class="very-high-impact">0.95</td>
+                        <td>Very high causal impact</td>
+                    </tr>
+            
+                    <tr>
+                        <td>divergent_thinking capability</td>
+                        <td>model.layers.14</td>
+                        <td class="very-high-impact">0.93</td>
+                        <td>Very high causal impact</td>
+                    </tr>
+            
+                    <tr>
+                        <td>metaphorical_thinking capability</td>
+                        <td>model.layers.15</td>
+                        <td class="very-high-impact">0.90</td>
+                        <td>Very high causal impact</td>
+                    </tr>
+            
+                    <tr>
+                        <td>ethical_reasoning capability</td>
+                        <td>model.layers.9</td>
+                        <td class="very-high-impact">0.94</td>
+                        <td>Very high causal impact</td>
+                    </tr>
+            
+                    <tr>
+                        <td>human_experience capability</td>
+                        <td>model.layers.15</td>
+                        <td class="very-high-impact">0.91</td>
+                        <td>Very high causal impact</td>
+                    </tr>
+            
+                    <tr>
+                        <td>impossible_questions capability</td>
+                        <td>model.layers.12</td>
+                        <td class="very-high-impact">0.93</td>
+                        <td>Very high causal impact</td>
+                    </tr>
+            
+                </tbody>
+            </table>
+            
+            <p class="impact-explanation">The impact score represents how much model behavior changes when a feature is patched from one model to another.
+            Higher scores indicate that the feature is causally important for the model's behavior.</p>
+        </div>
+    </div>
+        
+</body>
+</html>
+    

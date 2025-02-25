@@ -1,0 +1,226 @@
+{
+  "model.layers.0.mlp.gate_proj.weight": {
+    "similarities": {
+      "model.layers.0.mlp.gate_proj.weight": 0.5739248991012573
+    },
+    "differences": {
+      "model.layers.0.mlp.gate_proj.weight": 2.0
+    }
+  },
+  "model.layers.1.mlp.gate_proj.weight": {
+    "similarities": {
+      "model.layers.1.mlp.gate_proj.weight": 0.7221826314926147
+    },
+    "differences": {
+      "model.layers.1.mlp.gate_proj.weight": 2.0
+    }
+  },
+  "model.layers.2.mlp.gate_proj.weight": {
+    "similarities": {
+      "model.layers.2.mlp.gate_proj.weight": 0.8519337773323059
+    },
+    "differences": {
+      "model.layers.2.mlp.gate_proj.weight": 2.0
+    }
+  },
+  "model.layers.3.mlp.gate_proj.weight": {
+    "similarities": {
+      "model.layers.3.mlp.gate_proj.weight": 0.763298749923706
+    },
+    "differences": {
+      "model.layers.3.mlp.gate_proj.weight": 2.0
+    }
+  },
+  "model.layers.4.mlp.gate_proj.weight": {
+    "similarities": {
+      "model.layers.4.mlp.gate_proj.weight": 0.5852261185646057
+    },
+    "differences": {
+      "model.layers.4.mlp.gate_proj.weight": 2.0
+    }
+  },
+  "model.layers.5.mlp.gate_proj.weight": {
+    "similarities": {
+      "model.layers.5.mlp.gate_proj.weight": 0.7873773574829102
+    },
+    "differences": {
+      "model.layers.5.mlp.gate_proj.weight": 2.0
+    }
+  },
+  "model.layers.6.mlp.gate_proj.weight": {
+    "similarities": {
+      "model.layers.6.mlp.gate_proj.weight": 0.6429944038391113
+    },
+    "differences": {
+      "model.layers.6.mlp.gate_proj.weight": 2.0
+    }
+  },
+  "model.layers.7.mlp.gate_proj.weight": {
+    "similarities": {
+      "model.layers.7.mlp.gate_proj.weight": 0.6881295442581177
+    },
+    "differences": {
+      "model.layers.7.mlp.gate_proj.weight": 2.0
+    }
+  },
+  "model.layers.8.mlp.gate_proj.weight": {
+    "similarities": {
+      "model.layers.8.mlp.gate_proj.weight": 0.6469931602478027
+    },
+    "differences": {
+      "model.layers.8.mlp.gate_proj.weight": 2.0
+    }
+  },
+  "model.layers.9.mlp.gate_proj.weight": {
+    "similarities": {
+      "model.layers.9.mlp.gate_proj.weight": 0.6826958656311035
+    },
+    "differences": {
+      "model.layers.9.mlp.gate_proj.weight": 2.0
+    }
+  },
+  "model.layers.10.mlp.gate_proj.weight": {
+    "similarities": {
+      "model.layers.10.mlp.gate_proj.weight": 0.7002756595611572
+    },
+    "differences": {
+      "model.layers.10.mlp.gate_proj.weight": 2.0
+    }
+  },
+  "model.layers.11.mlp.gate_proj.weight": {
+    "similarities": {
+      "model.layers.11.mlp.gate_proj.weight": 0.6424697637557983
+    },
+    "differences": {
+      "model.layers.11.mlp.gate_proj.weight": 2.0
+    }
+  },
+  "model.layers.12.mlp.gate_proj.weight": {
+    "similarities": {
+      "model.layers.12.mlp.gate_proj.weight": 0.6479066014289856
+    },
+    "differences": {
+      "model.layers.12.mlp.gate_proj.weight": 2.0
+    }
+  },
+  "model.layers.13.mlp.gate_proj.weight": {
+    "similarities": {
+      "model.layers.13.mlp.gate_proj.weight": 0.6119979619979858
+    },
+    "differences": {
+      "model.layers.13.mlp.gate_proj.weight": 2.0
+    }
+  },
+  "model.layers.14.mlp.gate_proj.weight": {
+    "similarities": {
+      "model.layers.14.mlp.gate_proj.weight": 0.5948512554168701
+    },
+    "differences": {
+      "model.layers.14.mlp.gate_proj.weight": 2.0
+    }
+  },
+  "model.layers.15.mlp.gate_proj.weight": {
+    "similarities": {
+      "model.layers.15.mlp.gate_proj.weight": 0.534048855304718
+    },
+    "differences": {
+      "model.layers.15.mlp.gate_proj.weight": 2.0
+    }
+  },
+  "model.layers.16.mlp.gate_proj.weight": {
+    "similarities": {
+      "model.layers.16.mlp.gate_proj.weight": 0.45045676827430725
+    },
+    "differences": {
+      "model.layers.16.mlp.gate_proj.weight": 2.0
+    }
+  },
+  "model.layers.17.mlp.gate_proj.weight": {
+    "similarities": {
+      "model.layers.17.mlp.gate_proj.weight": 0.46692973375320435
+    },
+    "differences": {
+      "model.layers.17.mlp.gate_proj.weight": 2.0
+    }
+  },
+  "model.layers.18.mlp.gate_proj.weight": {
+    "similarities": {
+      "model.layers.18.mlp.gate_proj.weight": 0.43382108211517334
+    },
+    "differences": {
+      "model.layers.18.mlp.gate_proj.weight": 2.0
+    }
+  },
+  "model.layers.19.mlp.gate_proj.weight": {
+    "similarities": {
+      "model.layers.19.mlp.gate_proj.weight": 0.4567442536354065
+    },
+    "differences": {
+      "model.layers.19.mlp.gate_proj.weight": 2.0
+    }
+  },
+  "model.layers.20.mlp.gate_proj.weight": {
+    "similarities": {
+      "model.layers.20.mlp.gate_proj.weight": 0.5349265933036804
+    },
+    "differences": {
+      "model.layers.20.mlp.gate_proj.weight": 2.0
+    }
+  },
+  "model.layers.21.mlp.gate_proj.weight": {
+    "similarities": {
+      "model.layers.21.mlp.gate_proj.weight": 0.5423056483268738
+    },
+    "differences": {
+      "model.layers.21.mlp.gate_proj.weight": 2.0
+    }
+  },
+  "model.layers.22.mlp.gate_proj.weight": {
+    "similarities": {
+      "model.layers.22.mlp.gate_proj.weight": 0.6694045066833496
+    },
+    "differences": {
+      "model.layers.22.mlp.gate_proj.weight": 2.0
+    }
+  },
+  "model.layers.23.mlp.gate_proj.weight": {
+    "similarities": {
+      "model.layers.23.mlp.gate_proj.weight": 0.7013888955116272
+    },
+    "differences": {
+      "model.layers.23.mlp.gate_proj.weight": 2.0
+    }
+  },
+  "model.layers.24.mlp.gate_proj.weight": {
+    "similarities": {
+      "model.layers.24.mlp.gate_proj.weight": 0.6200405359268188
+    },
+    "differences": {
+      "model.layers.24.mlp.gate_proj.weight": 2.0
+    }
+  },
+  "model.layers.25.mlp.gate_proj.weight": {
+    "similarities": {
+      "model.layers.25.mlp.gate_proj.weight": 0.5174479484558105
+    },
+    "differences": {
+      "model.layers.25.mlp.gate_proj.weight": 2.0
+    }
+  },
+  "model.layers.26.mlp.gate_proj.weight": {
+    "similarities": {
+      "model.layers.26.mlp.gate_proj.weight": 0.46761953830718994
+    },
+    "differences": {
+      "model.layers.26.mlp.gate_proj.weight": 2.0
+    }
+  },
+  "model.layers.27.mlp.gate_proj.weight": {
+    "similarities": {
+      "model.layers.27.mlp.gate_proj.weight": 0.5962209701538086
+    },
+    "differences": {
+      "model.layers.27.mlp.gate_proj.weight": 2.0
+    }
+  }
+}
