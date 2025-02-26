@@ -182,3 +182,9 @@ model_cache/
 
 
 experiments/*
+feature_activations/*
+feature_interpretations/*
+integrated_results/*
+crosscoder_results/*
+
+integrated_analysis/*
