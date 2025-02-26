@@ -5,7 +5,6 @@ This script shows how to use the feature interpretation pipeline to compare
 two models and generate a comprehensive report of their differences.
 """
 
-import os
 from pathlib import Path
 
 from ops.feature_interpreter import run_feature_interpretation_pipeline
@@ -43,6 +42,7 @@ def main():
         base_model=base_model,
         target_model=target_model,
         output_dir=output_dir,
+        prompt_categories=prompt_categories,
         device="cuda",
         cache_dir=cache_dir,
         quantization="fp16",
