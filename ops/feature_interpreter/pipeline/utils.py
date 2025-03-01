@@ -111,8 +111,16 @@ def flatten_prompts(prompt_categories: Dict[str, List[str]]) -> Tuple[List[str],
     prompt_to_category = {}
     
     for category, prompts in prompt_categories.items():
-        all_prompts.extend(prompts)
-        for prompt in prompts:
-            prompt_to_category[prompt] = category
+        # Encode the category in the prompt key for easier identification later
+        for i, prompt in enumerate(prompts):
+            # Create a prompt key that includes the category
+            prompt_key = f"{category}/{i+1}:{prompt[:50]}"  # Include a prefix of the prompt text for readability
+            all_prompts.append(prompt_key)
+            prompt_to_category[prompt_key] = category
+    
+    logger.info(f"Flattened {len(prompt_categories)} categories into {len(all_prompts)} prompts")
+    # Log the number of prompts per category
+    for category, count in {cat: list(prompt_to_category.values()).count(cat) for cat in set(prompt_to_category.values())}.items():
+        logger.info(f"  {category}: {count} prompts")
     
     return all_prompts, prompt_to_category 

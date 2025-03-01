@@ -18,7 +18,7 @@ from .naming import (
 )
 
 # Import from the visualization package
-from .visualization import create_feature_distribution_plot, create_anthropic_style_visualization
+from .visualization import create_feature_distribution_plot, create_reasoning_category_visualization
 
 # Import from the reporting package
 from .reporting.report_generator import generate_report
@@ -59,7 +59,7 @@ __all__ = [
     
     # Visualization
     "create_feature_distribution_plot",
-    "create_anthropic_style_visualization",
+    "create_reasoning_category_visualization",
     
     # Reporting
     "generate_report",

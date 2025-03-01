@@ -166,17 +166,162 @@ def _generate_basic_interpretation(activation_differences: Dict, threshold: floa
         layer_counts[layer] += 1
         avg_differences.append(data['difference'])
     
-    # Generate basic interpretation
-    interpretation = {
-        "features": [{
-            "name": f"feature_in_{layer}" if layer != 'unknown' else "unknown_feature",
-            "description": f"Feature identified by activation differences in {len(significant_prompts)} prompts",
+    # Analyze prompts to create better feature descriptions
+    prompt_keywords = _extract_prompt_themes(list(significant_prompts.keys()))
+    
+    # Generate enhanced interpretations for each layer
+    features = []
+    for layer, count in layer_counts.most_common(3):  # Top 3 layers with differences
+        layer_prompts = [p for p, d in significant_prompts.items() if d.get('layer') == layer]
+        layer_keywords = _extract_prompt_themes(layer_prompts)
+        
+        # Analyze base and target outputs to determine which model the feature belongs to
+        base_outputs = [significant_prompts[p]['base_output'] for p in layer_prompts if 'base_output' in significant_prompts[p]]
+        target_outputs = [significant_prompts[p]['target_output'] for p in layer_prompts if 'target_output' in significant_prompts[p]]
+        
+        # Determine feature direction - which model this feature primarily influences
+        # Analyze based on output characteristics
+        base_word_count = sum(len(output.split()) for output in base_outputs) / len(base_outputs) if base_outputs else 0
+        target_word_count = sum(len(output.split()) for output in target_outputs) / len(target_outputs) if target_outputs else 0
+        
+        # Analyze differences in content and patterns 
+        is_base_distinctive = False
+        is_target_distinctive = False
+        
+        # Check for keywords that suggest model attribution
+        for prompt in layer_prompts[:5]:  # Check a sample of prompts
+            base_out = significant_prompts[prompt].get('base_output', '').lower()
+            target_out = significant_prompts[prompt].get('target_output', '').lower()
+            
+            # Check for distinctive patterns in each model's output
+            if any(kw in base_out and kw not in target_out for kw in ['logical', 'step by step', 'formal']):
+                is_base_distinctive = True
+            
+            if any(kw in target_out and kw not in base_out for kw in ['improved', 'detailed', 'enhanced']):
+                is_target_distinctive = True
+        
+        # Explicitly assign model attribution based on analysis
+        if is_base_distinctive and not is_target_distinctive:
+            model_attribution = "base"
+        elif is_target_distinctive and not is_base_distinctive:
+            model_attribution = "target"
+        elif base_word_count > target_word_count * 1.2:
+            # If base model outputs are significantly longer, feature is more likely base-specific
+            model_attribution = "base"
+        elif target_word_count > base_word_count * 1.2:
+            # If target model outputs are significantly longer, feature is more likely target-specific
+            model_attribution = "target" 
+        else:
+            # If no clear signal, use the feature theme to make a best guess
+            feature_theme = layer_keywords['primary_theme'].lower()
+            if feature_theme in ['logical', 'probabilistic', 'formal_logic']:
+                model_attribution = "base"  # Some reasoning patterns might be stronger in base model
+            else:
+                model_attribution = "target"  # Default to target for other cases
+        
+        # Generate a more descriptive name and description
+        feature_theme = layer_keywords['primary_theme'] if layer_keywords['primary_theme'] else prompt_keywords['primary_theme']
+        
+        # Include model attribution in feature name for better interpretability
+        name_prefix = "base" if model_attribution == "base" else "target"
+        feature_name = f"{name_prefix}_{feature_theme}_in_{layer}" if layer != 'unknown' else f"{name_prefix}_{feature_theme}_feature"
+        
+        # Create a more detailed description with explicit model attribution
+        description = f"Feature in layer {layer.split('.')[-1]} "
+        if model_attribution == "base":
+            description += f"that appears stronger in the base model, "
+        else:
+            description += f"that appears stronger in the target model, "
+        description += f"related to {feature_theme} reasoning "
+        if layer_keywords['secondary_themes']:
+            description += f"with elements of {', '.join(layer_keywords['secondary_themes'][:2])} "
+        description += f"(identified in {len(layer_prompts)} prompts)"
+        
+        # Get the average difference
+        layer_avg_diff = np.mean([d['difference'] for p, d in significant_prompts.items() 
+                                if d.get('layer') == layer])
+        
+        features.append({
+            "name": feature_name,
+            "description": description,
             "layer": layer,
-            "avg_difference": sum(avg_differences) / len(avg_differences) if avg_differences else 0,
-            "significance": len(significant_prompts) / len(activation_differences) if activation_differences else 0,
-            "prompts": list(significant_prompts.keys())[:10]  # Limit to 10 prompts for readability
-        } for layer, count in layer_counts.most_common(3)],  # Top 3 layers with differences
-        "interpretation": "Basic interpretation based only on activation differences without output analysis"
+            "avg_difference": layer_avg_diff,
+            "significance": count / len(activation_differences) if activation_differences else 0,
+            "prompts": layer_prompts[:10],  # Limit to 10 prompts for readability
+            "themes": {
+                "primary": feature_theme,
+                "secondary": layer_keywords['secondary_themes']
+            },
+            "model_attribution": model_attribution  # Explicitly store model attribution
+        })
+    
+    # Generate overall interpretation
+    overall_interpretation = f"Identified {len(features)} features primarily related to "
+    overall_interpretation += f"{prompt_keywords['primary_theme']} reasoning"
+    if prompt_keywords['secondary_themes']:
+        overall_interpretation += f" with elements of {', '.join(prompt_keywords['secondary_themes'][:3])}"
+    
+    # Count features by model
+    base_count = sum(1 for f in features if f.get('model_attribution') == 'base')
+    target_count = sum(1 for f in features if f.get('model_attribution') == 'target')
+    
+    # Add model distribution to interpretation
+    overall_interpretation += f". Found {base_count} features specific to the base model and {target_count} features specific to the target model."
+    
+    interpretation = {
+        "features": features,
+        "interpretation": overall_interpretation
     }
     
-    return interpretation 
+    return interpretation
+
+def _extract_prompt_themes(prompts):
+    """
+    Extract themes and topics from a list of prompts.
+    
+    Args:
+        prompts: List of prompt strings
+        
+    Returns:
+        Dictionary with primary theme and list of secondary themes
+    """
+    # Define categories of reasoning and associated keywords
+    reasoning_categories = {
+        "mathematical": ["equation", "solve", "math", "calculation", "compute", "number", "formula", 
+                         "arithmetic", "algebra", "calculation"],
+        "probabilistic": ["probability", "random", "chance", "likelihood", "dice", "cards", "coin toss",
+                          "expected value", "balls", "draw"],
+        "logical": ["logic", "if then", "deduction", "inference", "valid", "argument", "conclusion", 
+                    "reasoning", "statement", "premise"],
+        "spatial": ["distance", "area", "volume", "perimeter", "shape", "geometric", "rectangle", 
+                   "square", "triangle", "dimension"],
+        "temporal": ["time", "duration", "hours", "minutes", "seconds", "timeline", "schedule", 
+                     "before", "after", "during"],
+        "quantitative": ["quantity", "amount", "total", "sum", "difference", "product", "quotient", 
+                         "measurement", "count", "rate"],
+        "economic": ["money", "cost", "price", "buy", "sell", "purchase", "dollar", "spend", "save", 
+                    "discount", "sale", "economics"]
+    }
+    
+    # Count occurrences of each category in prompts
+    category_counts = Counter()
+    
+    for prompt in prompts:
+        prompt_lower = prompt.lower()
+        for category, keywords in reasoning_categories.items():
+            for keyword in keywords:
+                if keyword.lower() in prompt_lower:
+                    category_counts[category] += 1
+                    break  # Count each category only once per prompt
+    
+    # Determine primary and secondary themes
+    primary_theme = category_counts.most_common(1)[0][0] if category_counts else "general"
+    
+    # Get secondary themes (excluding primary)
+    secondary_themes = [category for category, count in category_counts.most_common() 
+                        if category != primary_theme and count > 0]
+    
+    return {
+        "primary_theme": primary_theme,
+        "secondary_themes": secondary_themes
+    } 

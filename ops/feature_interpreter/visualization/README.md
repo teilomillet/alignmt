@@ -11,7 +11,8 @@ Basic visualization functions:
 
 ### advanced.py
 Advanced visualization techniques:
-- `create_anthropic_style_visualization`: Creates visualizations similar to those used in Anthropic research papers
+- `create_reasoning_category_visualization`: Creates visualizations that group features by reasoning category across layers
+- `create_anthropic_style_visualization`: (DEPRECATED) Maintained for backward compatibility only
 - `visualize_interpretable_features`: Creates visualizations that help interpret feature behaviors
 
 ### analysis.py
@@ -32,3 +33,7 @@ The visualization module is typically used after features have been extracted, n
 3. Using these visualizations to gain insights into model differences
 
 These visualizations help researchers communicate their findings about model differences and feature interpretations, making complex neural network behavior more understandable. 
+
+## Feature Categorization
+
+The new reasoning category visualization groups features by their reasoning type (e.g., mathematical, logical, probabilistic) and allows researchers to see how these reasoning capabilities differ between models across different layers. 

@@ -53,6 +53,12 @@ def compute_activation_differences(
         if not isinstance(target_act, torch.Tensor):
             target_act = torch.tensor(target_act)
         
+        # Convert to float32 if needed to handle bfloat16
+        if base_act.dtype != torch.float32:
+            base_act = base_act.to(torch.float32)
+        if target_act.dtype != torch.float32:
+            target_act = target_act.to(torch.float32)
+        
         # Mean pool across sequence length if present
         if len(base_act.shape) > 2:
             base_act = base_act.mean(dim=1)

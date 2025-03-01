@@ -105,19 +105,17 @@ def run_feature_interpretation_pipeline(config: PipelineConfig) -> Dict[str, Any
         # Step 6: Perform causal validation
         # Check if we have crosscoder results available from the integrated pipeline
         crosscoder_analysis = None
-        if hasattr(config, 'crosscoder_results'):
+        if hasattr(config, 'causal_validation_data'):
+            logger.info("Using pre-formatted causal validation data from integrated pipeline")
+            crosscoder_analysis = config.causal_validation_data
+        elif hasattr(config, 'crosscoder_results'):
             logger.info("Using crosscoder results from integrated pipeline for causal validation")
             crosscoder_analysis = config.crosscoder_results
         
         interpreted_features = perform_causal_validation(
-            base_model=config.base_model,
-            target_model=config.target_model,
+            model_path=config.target_model,  # Use target model for validation
             output_dir=config.output_dir,
-            activations=activations,
             interpreted_features=interpreted_features,
-            device=config.device,
-            cache_dir=config.cache_dir,
-            quantization=config.quantization,
             crosscoder_analysis=crosscoder_analysis
         )
     
@@ -132,14 +130,6 @@ def run_feature_interpretation_pipeline(config: PipelineConfig) -> Dict[str, Any
         skip=config.skip_capability_testing
     )
     
-    # Step 8: Create visualizations
-    create_visualizations(
-        output_dir=config.output_dir,
-        interpreted_features=interpreted_features,
-        layer_similarities=layer_similarities,
-        skip=config.skip_visualization
-    )
-    
     # Step 9: Perform decoder analysis
     interpreted_features = perform_decoder_analysis(
         output_dir=config.output_dir,
@@ -148,6 +138,29 @@ def run_feature_interpretation_pipeline(config: PipelineConfig) -> Dict[str, Any
         norm_ratio_threshold=config.norm_ratio_threshold,
         n_clusters=config.n_clusters,
         skip=config.skip_decoder_analysis
+    )
+    
+    # Extract feature data from decoder analysis for visualization
+    feature_data = None
+    crosscoder_data = None
+    
+    if not config.skip_decoder_analysis and "decoder_analysis" in interpreted_features:
+        feature_data = interpreted_features["decoder_analysis"].get("feature_data", None)
+        logger.info("Found decoder analysis feature data for enhanced visualization")
+    
+    # Get crosscoder data if available
+    if hasattr(config, 'crosscoder_results'):
+        crosscoder_data = config.crosscoder_results
+        logger.info("Found crosscoder data for enhanced visualization")
+    
+    # Step 8: Create visualizations with enhanced data
+    create_visualizations(
+        output_dir=config.output_dir,
+        interpreted_features=interpreted_features,
+        layer_similarities=layer_similarities,
+        skip=config.skip_visualization,
+        feature_data=feature_data,
+        crosscoder_data=crosscoder_data
     )
     
     # Step 10: Generate report

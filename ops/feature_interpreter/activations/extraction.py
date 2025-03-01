@@ -32,7 +32,7 @@ def extract_activations(
     
     Args:
         model_name: Name of the model to analyze
-        prompts: List of prompts to run through the model
+        prompts: List of prompts to run through the model (may contain encoded category information)
         layer_names: Names of layers to extract activations from
         output_dir: Directory to save activations
         device: Device to use
@@ -46,6 +46,41 @@ def extract_activations(
     
     # Create output directory
     os.makedirs(output_dir, exist_ok=True)
+    
+    # Process prompt keys to extract actual prompts if they're in the encoded format
+    prompt_texts = []
+    prompt_mapping = {}  # Maps original prompt keys to extracted prompt texts
+    
+    for prompt_key in prompts:
+        # Check if the prompt is in the encoded format (category/index:prompt_text)
+        if '/' in prompt_key and ':' in prompt_key:
+            try:
+                # Extract the actual prompt text after the colon
+                category_and_index, prompt_text_prefix = prompt_key.split(':', 1)
+                
+                # If the prompt text was truncated, we need to find the original
+                if len(prompt_text_prefix) == 50 and prompt_text_prefix.endswith('...'):
+                    # This is a truncated prompt, which we can't use directly
+                    # Log a warning and use the prefix as-is
+                    logger.warning(f"Using truncated prompt text: {prompt_text_prefix}")
+                    prompt_text = prompt_text_prefix
+                else:
+                    # Use the full prompt text
+                    prompt_text = prompt_text_prefix
+                
+                prompt_texts.append(prompt_text)
+                prompt_mapping[prompt_key] = prompt_text
+            except Exception as e:
+                # If there's an error parsing, use the prompt key as-is
+                logger.warning(f"Error parsing prompt key '{prompt_key}': {e}. Using as-is.")
+                prompt_texts.append(prompt_key)
+                prompt_mapping[prompt_key] = prompt_key
+        else:
+            # If it's not in the encoded format, use it as-is
+            prompt_texts.append(prompt_key)
+            prompt_mapping[prompt_key] = prompt_key
+    
+    logger.info(f"Processing {len(prompt_texts)} prompts")
     
     # Load model and tokenizer with appropriate quantization
     # Note: Our load_model_and_tokenizer only supports use_bf16 parameter
@@ -90,8 +125,8 @@ def extract_activations(
     results = {}
     
     try:
-        for i, prompt in enumerate(prompts):
-            logger.info(f"Processing prompt {i+1}/{len(prompts)}: {prompt[:50]}...")
+        for i, prompt in enumerate(prompt_texts):
+            logger.info(f"Processing prompt {i+1}/{len(prompt_texts)}: {prompt[:50]}...")
             
             # Tokenize input
             inputs = tokenizer(
@@ -121,14 +156,18 @@ def extract_activations(
             
             # Store activations for this prompt
             prompt_activations = {}
-            for layer_name, layer_activations in activations.items():
-                if layer_activations:  # Check if we captured any activations
+            
+            # Process and store activations for selected layers
+            for layer_name, activation in activations.items():
+                if activation:  # Check if we captured any activations
                     # Get the last activation (from generation)
-                    layer_output = layer_activations[-1]
+                    layer_output = activation[-1]
                     prompt_activations[layer_name] = layer_output.cpu()
             
             # Store results for this prompt
-            results[prompt] = {
+            # Use the original prompt key from the prompts list
+            original_prompt_key = prompts[i]
+            results[original_prompt_key] = {
                 'text': generated_text,
                 'activations': prompt_activations
             }
@@ -150,7 +189,7 @@ def extract_activations(
         del model
         torch.cuda.empty_cache()
     
-    logger.info(f"Completed activation extraction for {len(prompts)} prompts")
+    logger.info(f"Completed activation extraction for {len(prompt_texts)} prompts")
     return results
 
 def extract_activations_for_comparison(

@@ -12,7 +12,7 @@ import argparse
 from typing import Dict
 
 from .basic import create_feature_distribution_plot, create_feature_heatmap
-from .advanced import create_anthropic_style_visualization, visualize_interpretable_features
+from .advanced import create_reasoning_category_visualization, visualize_interpretable_features
 from .analysis import categorize_features_by_norm, calculate_feature_alignment
 
 # Configure logging
@@ -43,11 +43,11 @@ def create_visualizations(
     # Extract layer similarities or create empty dict if not available
     layer_similarities = feature_data.get("layer_similarities", {})
     
-    # Create Anthropic-style visualization
-    create_anthropic_style_visualization(
+    # Create reasoning category visualization
+    create_reasoning_category_visualization(
         feature_data,
         layer_similarities,
-        os.path.join(output_dir, "feature_anthropic_style.png")
+        os.path.join(output_dir, "reasoning_category_visualization.png")
     )
     
     # Create feature heatmap

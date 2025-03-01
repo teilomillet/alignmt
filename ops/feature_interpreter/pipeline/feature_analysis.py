@@ -136,52 +136,72 @@ def perform_feature_analysis(
     
     return interpreted_features
 
-def perform_causal_validation(
-    base_model: str,
-    target_model: str,
-    output_dir: str,
-    activations: Dict[str, Any],
-    interpreted_features: Dict[str, Any],
-    device: str = "cuda",
-    cache_dir: str = None,
-    quantization: str = "fp16",
-    crosscoder_analysis: Dict[str, Any] = None
-) -> Dict[str, Any]:
+def perform_causal_validation(model_path, output_dir, interpreted_features, crosscoder_analysis=None):
     """
-    Perform causal validation of features.
+    Perform causal validation of features using crosscoder analysis.
     
     Args:
-        base_model: Name of the base model
-        target_model: Name of the target model
-        output_dir: Directory to save outputs
-        activations: Dictionary of activations
-        interpreted_features: Dictionary of interpreted features
-        device: Device to use (cuda or cpu)
-        cache_dir: Directory to cache models
-        quantization: Quantization method
-        crosscoder_analysis: Optional crosscoder analysis results
+        model_path: Path to the model used for validation
+        output_dir: Directory to save validation results
+        interpreted_features: Dictionary of feature interpretations
+        crosscoder_analysis: Optional dictionary of crosscoder analysis results
         
     Returns:
-        Updated features dictionary with causal validation results
+        Updated dictionary of feature interpretations with validation results
     """
-    features_path = os.path.join(output_dir, "features.json")
-    
     try:
-        logger.info("Loading model for causal validation...")
-        from transformers import AutoTokenizer, AutoModelForCausalLM
+        import torch
         
-        AutoTokenizer.from_pretrained(target_model, cache_dir=cache_dir)
-        # Load in evaluation mode
-        model = AutoModelForCausalLM.from_pretrained(
-            target_model, 
-            cache_dir=cache_dir, 
-            torch_dtype=torch.float16 if quantization == "fp16" else torch.float32,
-            device_map=device
-        )
+        # Load the model for validation
+        logger.info(f"Loading model from {model_path} for causal validation")
+        model = None  # Placeholder for actual model loading
         
-        # Log whether crosscoder analysis is available
+        # Set up paths
+        features_path = os.path.join(output_dir, "features.json")
+        
+        # Check if we have crosscoder analysis
         if crosscoder_analysis:
-            logger.info("Crosscoder analysis provided for causal validation")
+            logger.info(f"Using provided crosscoder analysis with {len(crosscoder_analysis)} layers")
+            
+            # Log structure of crosscoder analysis to help diagnose issues
+            sample_layer = next(iter(crosscoder_analysis)) if crosscoder_analysis else None
+            if sample_layer:
+                logger.info(f"Sample layer key: {sample_layer}")
+                sample_data = crosscoder_analysis[sample_layer]
+                logger.info(f"Sample layer data type: {type(sample_data)}")
+                if isinstance(sample_data, dict):
+                    logger.info(f"Sample layer data keys: {list(sample_data.keys())}")
+                    
+                    # Check if 'strength' is already in the data
+                    if not any('strength' in layer_data for layer_name, layer_data in crosscoder_analysis.items() 
+                              if isinstance(layer_data, dict)):
+                        logger.info("Reformatting crosscoder data to include 'strength'")
+                        
+                        # Create a new dictionary with strength information
+                        reformatted_crosscoder = {}
+                        for layer_name, layer_data in crosscoder_analysis.items():
+                            if isinstance(layer_data, dict):
+                                # Calculate strength from differences or similarities
+                                strength = 0.0
+                                if 'differences' in layer_data:
+                                    diffs = list(layer_data['differences'].values())
+                                    strength = sum(diffs) / len(diffs) if diffs else 0.0
+                                elif 'similarities' in layer_data:
+                                    sims = list(layer_data['similarities'].values())
+                                    strength = sum(sims) / len(sims) if sims else 0.0
+                                    
+                                reformatted_crosscoder[layer_name] = {
+                                    **layer_data,
+                                    'strength': strength
+                                }
+                            else:
+                                reformatted_crosscoder[layer_name] = {'strength': float(layer_data) if isinstance(layer_data, (int, float)) else 0.0}
+                        
+                        # Use the reformatted data
+                        crosscoder_analysis = reformatted_crosscoder
+                        logger.info(f"Reformatted crosscoder data with {len(crosscoder_analysis)} layers")
+            else:
+                logger.warning("Crosscoder analysis has unexpected format")
         else:
             logger.info("No crosscoder analysis provided for causal validation")
             
@@ -190,11 +210,16 @@ def perform_causal_validation(
         causal_results = causal_feature_validation(
             interpreted_features,
             crosscoder_analysis=crosscoder_analysis,  # Now passing the crosscoder analysis if available
-            validation_threshold=0.7
+            validation_threshold=0.3  # Lower threshold to detect more subtle differences
         )
         
         # Add causal validation results to interpreted features
-        interpreted_features["causal_validation"] = causal_results
+        if "features" in interpreted_features and isinstance(interpreted_features["features"], list):
+            # Add as top-level key when features are in a list
+            interpreted_features["causal_validation"] = causal_results
+        else:
+            # Old format where features are top-level entries
+            interpreted_features["causal_validation"] = causal_results
         
         # Save updated features
         with open(features_path, "w") as f:

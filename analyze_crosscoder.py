@@ -19,7 +19,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
-from pathlib import Path
 import re
 
 # Set plot style
@@ -96,7 +95,7 @@ early_avg = early_layers['similarity'].mean()
 middle_avg = middle_layers['similarity'].mean()
 late_avg = late_layers['similarity'].mean()
 
-print(f"Average similarity by layer group:")
+print("Average similarity by layer group:")
 print(f"Early layers (0-{n_layers//3-1}): {early_avg:.4f}")
 print(f"Middle layers ({n_layers//3}-{2*n_layers//3-1}): {middle_avg:.4f}")
 print(f"Late layers ({2*n_layers//3}-{n_layers-1}): {late_avg:.4f}")

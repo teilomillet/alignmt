@@ -8,180 +8,353 @@ import matplotlib.pyplot as plt
 import numpy as np
 import logging
 import re
-from typing import Dict, Tuple
+from typing import Dict, Tuple, List
 import seaborn as sns
+from matplotlib.colors import LinearSegmentedColormap
 
 # Configure logging
 logger = logging.getLogger(__name__)
 
-def create_anthropic_style_visualization(
+def create_reasoning_category_visualization(
     interpreted_features: Dict,
     layer_similarities: Dict,
     output_path: str
 ) -> None:
     """
-    Create an Anthropic-style visualization showing feature distributions and layer similarities.
+    Create a visualization showing feature distributions across reasoning categories and layers.
     
     Args:
         interpreted_features: Dictionary with interpreted features
         layer_similarities: Dictionary with layer similarities
         output_path: Path to save the visualization
     """
-    # Extract features
-    base_features = interpreted_features.get("base_model_specific_features", [])
-    target_features = interpreted_features.get("target_model_specific_features", [])
-    
-    # Create a figure with two subplots side by side
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(18, 10), gridspec_kw={'width_ratios': [1, 2]})
-    
-    # Check if there are layer similarities
-    if not layer_similarities:
-        logger.warning("No layer similarities found for visualization. Creating placeholder.")
-        ax1.text(0.5, 0.5, "No layer similarities data available", 
-                 horizontalalignment='center', verticalalignment='center',
-                 transform=ax1.transAxes, fontsize=14)
-        ax1.set_title('Layer Similarities (No Data)')
+    # Extract features based on different possible formats
+    if "features" in interpreted_features and isinstance(interpreted_features["features"], list):
+        # New format: features are in a list under "features" key
+        features_list = interpreted_features["features"]
+        base_features = []
+        target_features = []
+        
+        # Determine which features belong to base vs target based on their description
+        for feature in features_list:
+            if "description" in feature:
+                description = feature["description"].lower()
+                if "base" in description or "weakened" in description:
+                    base_features.append(feature)
+                elif "target" in description or "added" in description or "enhanced" in description:
+                    target_features.append(feature)
+                else:
+                    # If not clear, put in base features by default
+                    base_features.append(feature)
     else:
-        # Sort layers by number if possible
-        sorted_layers = []
-        for layer in layer_similarities.keys():
-            # Extract layer number if possible
-            match = re.search(r'(\d+)', layer)
-            if match:
-                layer_num = int(match.group(1))
-                sorted_layers.append((layer_num, layer))
-            else:
-                # If no number found, use a large number to place at the end
-                sorted_layers.append((999, layer))
-        
-        sorted_layers.sort()
-        sorted_layer_names = [layer[1] for layer in sorted_layers]
-        
-        # Create layer labels for y-axis
-        layer_labels = []
-        for layer in sorted_layer_names:
-            # Extract layer number if possible
-            match = re.search(r'(\d+)', layer)
-            if match:
-                layer_labels.append(f"Layer {match.group(1)}")
-            else:
-                layer_labels.append(layer)
-        
-        # Plot 1: Layer similarities
-        similarities = [layer_similarities[layer] for layer in sorted_layer_names]
-        
-        # Create a horizontal bar chart for similarities
-        ax1.barh(layer_labels, similarities, color='lightgray')
-        ax1.set_xlabel('Similarity')
-        ax1.set_ylabel('Layer')
-        ax1.set_title('Layer Similarities')
-        ax1.set_xlim(0, 1)
-        ax1.grid(axis='x', linestyle='--', alpha=0.7)
+        # Old format: separate keys for base and target features
+        base_features = interpreted_features.get("base_model_specific_features", [])
+        target_features = interpreted_features.get("target_model_specific_features", [])
     
-    # Check if there are any features at all
+    # Create a figure with three panels
+    fig = plt.figure(figsize=(18, 12))
+    
+    # Define grid for the figure
+    gs = plt.GridSpec(4, 6, figure=fig)
+    
+    # First panel (top left): Layer similarities
+    ax1 = fig.add_subplot(gs[0:2, 0:2])
+    
+    # Second panel (spans two rows): Feature distribution by reasoning category
+    ax2 = fig.add_subplot(gs[0:4, 2:6])
+    
+    # Third panel (bottom left): Legend and summary
+    ax3 = fig.add_subplot(gs[2:4, 0:2])
+    
+    # Plot layer similarities
+    _plot_layer_similarities(ax1, layer_similarities)
+    
+    # Check if we have any features
     if not base_features and not target_features:
-        logger.warning("No features found for visualization. Creating fallback plot.")
-        ax2.text(0.5, 0.5, "No features found\n\nThis may indicate either:\n- Very similar models with few distinct features\n- Insufficient prompts to detect differences\n- Issue in feature extraction", 
-                 horizontalalignment='center', verticalalignment='center',
-                 transform=ax2.transAxes, fontsize=14)
-        ax2.set_title('Feature Distribution Across Layers (No Features Detected)')
+        _plot_no_features_message(ax2)
+        _plot_legend_and_summary(ax3, {}, {})
     else:
-        # Get all layers from both base and target features
-        all_layers = set()
-        for feature in base_features + target_features:
-            layer = feature.get("layer", "unknown")
-            all_layers.add(layer)
+        # Group features by reasoning category
+        base_by_category = _group_by_reasoning_category(base_features)
+        target_by_category = _group_by_reasoning_category(target_features)
         
-        # Sort layers
-        sorted_layers = []
-        for layer in all_layers:
-            match = re.search(r'(\d+)', layer)
-            if match:
-                layer_num = int(match.group(1))
-                sorted_layers.append((layer_num, layer))
-            else:
-                sorted_layers.append((999, layer))
+        # Plot feature distribution by reasoning category
+        _plot_features_by_reasoning(ax2, base_by_category, target_by_category, layer_similarities)
         
-        sorted_layers.sort()
-        sorted_layer_names = [layer[1] for layer in sorted_layers]
-        
-        # Create layer labels
-        layer_labels = []
-        for layer in sorted_layer_names:
-            match = re.search(r'(\d+)', layer)
-            if match:
-                layer_labels.append(f"Layer {match.group(1)}")
-            else:
-                layer_labels.append(layer)
-        
-        # Initialize feature matrix
-        feature_matrix = np.zeros((len(layer_labels), 2))
-        
-        # Count features per layer for base model
-        for feature in base_features:
-            layer = feature.get("layer", "unknown")
-            if layer in sorted_layer_names:
-                idx = sorted_layer_names.index(layer)
-                feature_matrix[idx, 0] += feature.get("confidence", 1.0)
-        
-        # Count features per layer for target model
-        for feature in target_features:
-            layer = feature.get("layer", "unknown")
-            if layer in sorted_layer_names:
-                idx = sorted_layer_names.index(layer)
-                feature_matrix[idx, 1] += feature.get("confidence", 1.0)
-        
-        # Check if the feature matrix is empty or has no non-zero values
-        if feature_matrix.size == 0 or np.count_nonzero(feature_matrix) == 0:
-            logger.warning("Feature matrix is empty or has no non-zero values. Creating fallback plot.")
-            ax2.text(0.5, 0.5, "No significant features detected\n\nFeatures may be present but below confidence threshold", 
-                     horizontalalignment='center', verticalalignment='center',
-                     transform=ax2.transAxes, fontsize=14)
-            ax2.set_title('Feature Distribution (No Significant Features)')
-        else:
-            # Normalize feature counts
-            max_count = np.max(feature_matrix)
-            if max_count > 0:  # Avoid division by zero
-                feature_matrix = feature_matrix / max_count
-            
-            # Create a custom colormap (white to blue for base, white to red for target)
-            cmap_base = plt.cm.Blues
-            cmap_target = plt.cm.Reds
-            
-            # Plot heatmap for base model
-            sns.heatmap(feature_matrix[:, 0:1], ax=ax2, cmap=cmap_base, 
-                        cbar=False, linewidths=1, linecolor='white',
-                        xticklabels=['Base Model'], yticklabels=layer_labels)
-            
-            # Plot heatmap for target model
-            sns.heatmap(feature_matrix[:, 1:2], ax=ax2, cmap=cmap_target, 
-                        cbar=True, linewidths=1, linecolor='white',
-                        xticklabels=['Target Model'], yticklabels=[])
-            
-            ax2.set_title('Feature Distribution Across Layers')
-            
-            # Add feature annotations
-            for i, layer in enumerate(sorted_layer_names):
-                # Add base model features
-                base_layer_features = [f for f in base_features if f.get("layer") == layer]
-                if base_layer_features:
-                    feature_names = [f.get("name", "Unknown") for f in base_layer_features]
-                    ax2.text(-0.5, i + 0.5, ", ".join(feature_names[:2]), 
-                             ha='right', va='center', fontsize=8, color='blue')
-                
-                # Add target model features
-                target_layer_features = [f for f in target_features if f.get("layer") == layer]
-                if target_layer_features:
-                    feature_names = [f.get("name", "Unknown") for f in target_layer_features]
-                    ax2.text(2.5, i + 0.5, ", ".join(feature_names[:2]), 
-                             ha='left', va='center', fontsize=8, color='red')
+        # Plot legend and summary
+        _plot_legend_and_summary(ax3, base_by_category, target_by_category)
     
     # Adjust layout and save
     plt.tight_layout()
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
     plt.close()
     
-    logger.info(f"Anthropic-style visualization saved to {output_path}")
+    logger.info(f"Reasoning category visualization saved to {output_path}")
+
+def _plot_layer_similarities(ax, layer_similarities: Dict) -> None:
+    """Plot layer similarities in a horizontal bar chart."""
+    if not layer_similarities:
+        ax.text(0.5, 0.5, "No layer similarities data available", 
+                horizontalalignment='center', verticalalignment='center',
+                transform=ax.transAxes, fontsize=12)
+        ax.set_title('Layer Similarities (No Data)')
+        return
+    
+    # Sort layers by number if possible
+    sorted_layers = []
+    for layer in layer_similarities.keys():
+        # Extract layer number if possible
+        match = re.search(r'(\d+)', layer)
+        if match:
+            layer_num = int(match.group(1))
+            sorted_layers.append((layer_num, layer))
+        else:
+            # If no number found, use a large number to place at the end
+            sorted_layers.append((999, layer))
+    
+    sorted_layers.sort()
+    sorted_layer_names = [layer[1] for layer in sorted_layers]
+    
+    # Create layer labels for y-axis
+    layer_labels = []
+    for layer in sorted_layer_names:
+        # Extract layer number if possible
+        match = re.search(r'(\d+)', layer)
+        if match:
+            layer_labels.append(f"Layer {match.group(1)}")
+        else:
+            layer_labels.append(layer)
+    
+    # Plot layer similarities
+    similarities = [layer_similarities[layer] for layer in sorted_layer_names]
+    
+    # Add color gradient based on similarity value
+    colors = plt.cm.coolwarm(np.array(similarities))
+    
+    # Create a horizontal bar chart for similarities
+    bars = ax.barh(layer_labels, similarities, color=colors)
+    ax.set_xlabel('Similarity')
+    ax.set_ylabel('Layer')
+    ax.set_title('Layer Similarities')
+    ax.set_xlim(0, 1)
+    ax.grid(axis='x', linestyle='--', alpha=0.7)
+    
+    # Add a horizontal line at the average similarity
+    avg_similarity = np.mean(similarities)
+    ax.axvline(x=avg_similarity, color='green', linestyle='--', 
+               label=f'Avg: {avg_similarity:.2f}')
+    ax.legend(loc='upper right', fontsize=8)
+
+def _plot_no_features_message(ax) -> None:
+    """Plot a message when no features are available."""
+    ax.text(0.5, 0.5, "No features found\n\nThis may indicate either:\n- Very similar models with few distinct features\n- Insufficient prompts to detect differences\n- Issue in feature extraction", 
+             horizontalalignment='center', verticalalignment='center',
+             transform=ax.transAxes, fontsize=14)
+    ax.set_title('Feature Distribution by Reasoning Category (No Features Detected)')
+    ax.axis('off')
+
+def _group_by_reasoning_category(features: List[Dict]) -> Dict[str, List[Dict]]:
+    """Group features by reasoning category."""
+    # Initialize categories
+    categories = {
+        "logical": [],
+        "mathematical": [],
+        "probabilistic": [],
+        "spatial": [],
+        "temporal": [],
+        "counterfactual": [],
+        "analogical": [],
+        "causal": [],
+        "ethical": [],
+        "creative": [],
+        "other": []
+    }
+    
+    # Group features by reasoning category
+    for feature in features:
+        assigned = False
+        
+        # Check for themes in the new format
+        if "themes" in feature and isinstance(feature["themes"], dict):
+            primary_theme = feature["themes"].get("primary", "").lower()
+            if primary_theme and primary_theme in categories:
+                categories[primary_theme].append(feature)
+                assigned = True
+            
+        # Try to infer from the name or description if themes not available
+        if not assigned:
+            name = feature.get("name", "").lower()
+            description = feature.get("description", "").lower()
+            
+            # Check name and description for category keywords
+            for category in categories.keys():
+                if category != "other" and (category in name or category in description):
+                    categories[category].append(feature)
+                    assigned = True
+                    break
+            
+            # If still not assigned, put in "other"
+            if not assigned:
+                categories["other"].append(feature)
+    
+    # Remove empty categories
+    return {k: v for k, v in categories.items() if v}
+
+def _plot_features_by_reasoning(
+    ax, 
+    base_by_category: Dict, 
+    target_by_category: Dict, 
+    layer_similarities: Dict
+) -> None:
+    """Plot features organized by reasoning category and layers."""
+    # Get all unique categories
+    all_categories = set(list(base_by_category.keys()) + list(target_by_category.keys()))
+    
+    # Get all unique layers
+    all_layers = set()
+    for features in base_by_category.values():
+        for f in features:
+            if "layer" in f:
+                all_layers.add(f["layer"])
+    
+    for features in target_by_category.values():
+        for f in features:
+            if "layer" in f:
+                all_layers.add(f["layer"])
+    
+    # Sort layers
+    sorted_layers = []
+    for layer in all_layers:
+        match = re.search(r'(\d+)', layer)
+        if match:
+            layer_num = int(match.group(1))
+            sorted_layers.append((layer_num, layer))
+        else:
+            sorted_layers.append((999, layer))
+    
+    sorted_layers.sort()
+    sorted_layer_names = [layer[1] for layer in sorted_layers]
+    
+    # Create layer labels for y-axis
+    layer_labels = []
+    for layer in sorted_layer_names:
+        match = re.search(r'(\d+)', layer)
+        if match:
+            layer_labels.append(f"Layer {match.group(1)}")
+        else:
+            layer_labels.append(layer)
+    
+    # Sort categories alphabetically
+    sorted_categories = sorted(all_categories)
+    
+    # Create a matrix for the heatmap
+    matrix = np.zeros((len(sorted_layer_names), len(sorted_categories) * 2))
+    
+    # Define custom colormaps for base and target models
+    base_colors = [(1, 1, 1), (0, 0, 0.8)]  # White to blue
+    target_colors = [(1, 1, 1), (0.8, 0, 0)]  # White to red
+    base_cmap = LinearSegmentedColormap.from_list("base_cmap", base_colors)
+    target_cmap = LinearSegmentedColormap.from_list("target_cmap", target_colors)
+    
+    # Fill matrix with feature counts and confidence
+    for c_idx, category in enumerate(sorted_categories):
+        # Base model features (left side of the category)
+        for feature in base_by_category.get(category, []):
+            layer = feature.get("layer", "unknown")
+            if layer in sorted_layer_names:
+                l_idx = sorted_layer_names.index(layer)
+                confidence = feature.get("confidence", feature.get("avg_difference", 1.0))
+                matrix[l_idx, c_idx * 2] += confidence
+        
+        # Target model features (right side of the category)
+        for feature in target_by_category.get(category, []):
+            layer = feature.get("layer", "unknown")
+            if layer in sorted_layer_names:
+                l_idx = sorted_layer_names.index(layer)
+                confidence = feature.get("confidence", feature.get("avg_difference", 1.0))
+                matrix[l_idx, c_idx * 2 + 1] += confidence
+    
+    # Normalize matrix for better visualization
+    max_val = np.max(matrix) if np.max(matrix) > 0 else 1.0
+    matrix = matrix / max_val
+    
+    # Create the heatmap
+    sns.heatmap(matrix, cmap="viridis", ax=ax, cbar=False, 
+                linewidths=0.5, linecolor='white')
+    
+    # Customize the plot
+    ax.set_yticks(np.arange(len(layer_labels)) + 0.5)
+    ax.set_yticklabels(layer_labels)
+    
+    # Set x-ticks at the middle of each category pair
+    xticks = np.arange(1, len(sorted_categories) * 2, 2)
+    ax.set_xticks(xticks)
+    ax.set_xticklabels(sorted_categories, rotation=45, ha='right')
+    
+    # Add markers for base (B) and target (T) models
+    for c_idx, category in enumerate(sorted_categories):
+        # Add visual indicators for model types
+        for l_idx, layer in enumerate(sorted_layer_names):
+            # Base model features
+            if matrix[l_idx, c_idx * 2] > 0:
+                ax.text(c_idx * 2 + 0.25, l_idx + 0.5, "B", 
+                       color='white' if matrix[l_idx, c_idx * 2] > 0.5 else 'black',
+                       ha='center', va='center', fontsize=8, fontweight='bold')
+            
+            # Target model features
+            if matrix[l_idx, c_idx * 2 + 1] > 0:
+                ax.text(c_idx * 2 + 1 + 0.25, l_idx + 0.5, "T", 
+                       color='white' if matrix[l_idx, c_idx * 2 + 1] > 0.5 else 'black',
+                       ha='center', va='center', fontsize=8, fontweight='bold')
+    
+    ax.set_title('Feature Distribution by Reasoning Category and Layer')
+
+def _plot_legend_and_summary(
+    ax, 
+    base_by_category: Dict, 
+    target_by_category: Dict
+) -> None:
+    """Plot a legend and summary information."""
+    # Turn off axis
+    ax.axis('off')
+    
+    # Calculate summary statistics
+    base_count = sum(len(features) for features in base_by_category.values())
+    target_count = sum(len(features) for features in target_by_category.values())
+    
+    # Get counts by category
+    base_category_counts = {category: len(features) for category, features in base_by_category.items()}
+    target_category_counts = {category: len(features) for category, features in target_by_category.items()}
+    
+    # Create summary text
+    summary = f"Feature Summary:\n\n"
+    summary += f"Base Model Features: {base_count}\n"
+    summary += f"Target Model Features: {target_count}\n\n"
+    
+    # Add category breakdown if we have features
+    if base_category_counts or target_category_counts:
+        all_categories = set(list(base_category_counts.keys()) + list(target_category_counts.keys()))
+        summary += "Category Breakdown:\n"
+        
+        for category in sorted(all_categories):
+            base_cat_count = base_category_counts.get(category, 0)
+            target_cat_count = target_category_counts.get(category, 0)
+            summary += f"• {category.capitalize()}: {base_cat_count} base, {target_cat_count} target\n"
+    
+    # Add legend explanation
+    summary += "\nLegend:\n"
+    summary += "• 'B': Base model feature\n"
+    summary += "• 'T': Target model feature\n"
+    summary += "• Color intensity shows confidence/significance"
+    
+    # Add the text to the axis
+    ax.text(0.02, 0.98, summary, 
+           transform=ax.transAxes, 
+           verticalalignment='top',
+           horizontalalignment='left',
+           fontsize=10)
+
+
 
 
 def visualize_interpretable_features(

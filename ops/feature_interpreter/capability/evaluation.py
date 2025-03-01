@@ -1,25 +1,43 @@
 """
-Evaluation module for capability testing.
+Capability evaluation module.
 
-This module provides functions to load models, generate responses, 
-and evaluate model capabilities through contrastive testing.
+This module provides functions for evaluating model capabilities
+based on feature interpretations.
 """
 
-import logging
-import json
 import os
+import json
+import logging
 import torch
-from typing import Dict, List, Any, Optional
-from transformers import AutoModelForCausalLM, AutoTokenizer
+import warnings
+import re
+from typing import Dict, List, Tuple, Optional, Any, Union
+import importlib
 
-from .metrics import calculate_human_experience_score
+# Suppress the specific circular import warning when running this module directly
+warnings.filterwarnings("ignore", message=".*found in sys.modules after import of package.*", category=RuntimeWarning)
+
+from transformers import AutoTokenizer, AutoModelForCausalLM
+
+# Import the needed functions from examples and metrics with relative imports
+# These are less likely to cause circular imports than importing from higher levels
+def _import_examples():
+    """Import the examples module when needed to avoid circular imports."""
+    # Dynamic import to avoid circular dependencies
+    from .examples import generate_contrastive_examples, reset_used_prompts
+    return generate_contrastive_examples, reset_used_prompts
+
+def _import_metrics():
+    """Import the metrics module when needed to avoid circular imports."""
+    from .metrics import calculate_human_experience_score
+    return calculate_human_experience_score
 
 # Configure logging
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("capability_evaluation")
 
 def generate_response(
-    model: AutoModelForCausalLM,
-    tokenizer: AutoTokenizer,
+    model: Any,  # Using Any to avoid importing AutoModelForCausalLM
+    tokenizer: Any,  # Using Any to avoid importing AutoTokenizer
     prompt: str,
     max_new_tokens: int = 512
 ) -> str:
@@ -27,23 +45,27 @@ def generate_response(
     Generate a response from a model given a prompt.
     
     Args:
-        model: The model to use
-        tokenizer: The tokenizer to use
-        prompt: The prompt to generate from
-        max_new_tokens: Maximum number of new tokens to generate
+        model: The language model
+        tokenizer: The tokenizer
+        prompt: The input prompt
+        max_new_tokens: Maximum number of tokens to generate
         
     Returns:
-        Generated text
+        Generated response text
     """
-    inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+    inputs = tokenizer(prompt, return_tensors="pt")
+    
+    if torch.cuda.is_available() and hasattr(model, 'device') and 'cuda' in str(model.device):
+        inputs = {k: v.to(model.device) for k, v in inputs.items()}
+    
     with torch.no_grad():
         outputs = model.generate(
             **inputs,
             max_new_tokens=max_new_tokens,
-            do_sample=False
+            pad_token_id=tokenizer.eos_token_id,
         )
-    response = tokenizer.decode(outputs[0][inputs.input_ids.shape[1]:], skip_special_tokens=True)
-    return response
+    
+    return tokenizer.decode(outputs[0], skip_special_tokens=True)[len(tokenizer.decode(inputs['input_ids'][0], skip_special_tokens=True)):]
 
 def evaluate_feature_capability(
     base_model: str,
@@ -55,28 +77,59 @@ def evaluate_feature_capability(
     num_examples_per_feature: int = 2
 ) -> Dict:
     """
-    Evaluate capabilities associated with identified features through contrastive testing.
+    Evaluate the capability improvement between base and target models for features.
     
     Args:
-        base_model: Name of the base model
-        target_model: Name of the target model
-        interpreted_features: Dictionary with interpreted features
-        output_dir: Directory to save evaluation results
-        device: Device to use
-        cache_dir: Optional cache directory
-        num_examples_per_feature: Number of contrastive examples to test per feature
+        base_model: Name or path of the base model
+        target_model: Name or path of the target model
+        interpreted_features: Dictionary of interpreted features
+        output_dir: Directory to save outputs
+        device: Device to use (cuda or cpu)
+        cache_dir: Cache directory for models
+        num_examples_per_feature: Number of examples to generate per feature
         
     Returns:
-        Dictionary with evaluation results
+        Dictionary with capability scores
     """
+    # Import needed modules only when function is called to avoid circular deps
+    from transformers import AutoTokenizer, AutoModelForCausalLM
+    
+    # Import functions only when needed to avoid circular imports
+    generate_contrastive_examples, reset_used_prompts = _import_examples()
+    
+    # Clear the set of used prompts at the beginning of each evaluation run
+    reset_used_prompts()
+    
     logger.info(f"Evaluating feature capabilities for {base_model} vs {target_model}")
     
     # Create output directory
     os.makedirs(output_dir, exist_ok=True)
     
-    # Extract features
-    base_features = interpreted_features.get("base_model_specific_features", [])
-    target_features = interpreted_features.get("target_model_specific_features", [])
+    # Extract features - handle both old and new format
+    if "features" in interpreted_features and isinstance(interpreted_features["features"], list):
+        # New format: features are in a list under "features" key
+        all_features = interpreted_features["features"]
+        base_features = []
+        target_features = []
+        
+        # Determine which features belong to base vs target based on their description
+        for feature in all_features:
+            if "description" in feature:
+                description = feature["description"].lower()
+                if "base" in description or "weakened" in description:
+                    base_features.append(feature)
+                elif "target" in description or "added" in description or "enhanced" in description:
+                    target_features.append(feature)
+                else:
+                    # If not clear, put in base features by default
+                    base_features.append(feature)
+        
+        logger.info(f"Extracted {len(base_features)} base features and {len(target_features)} target features from new format")
+    else:
+        # Old format: separate keys for base and target features
+        base_features = interpreted_features.get("base_model_specific_features", [])
+        target_features = interpreted_features.get("target_model_specific_features", [])
+        logger.info(f"Extracted {len(base_features)} base features and {len(target_features)} target features from old format")
     
     # Initialize results
     base_feature_evaluations = []
@@ -210,6 +263,9 @@ def _calculate_feature_capability_scores(feature, is_target_feature=False):
         feature: Feature data with examples
         is_target_feature: Whether this is a target model feature (vs base model feature)
     """
+    # Import functions only when needed to avoid circular imports
+    calculate_human_experience_score = _import_metrics()
+    
     # Skip if already processed
     if feature.get("capability_scores_calculated", False):
         return
@@ -285,7 +341,8 @@ def _process_model_features(
         is_base_model: Whether this is the base model (True) or target model (False)
         base_feature_evaluations: Base feature evaluations (only needed for target model)
     """
-    from ..capability.examples import generate_contrastive_examples
+    # Import functions only when needed to avoid circular imports
+    generate_contrastive_examples, _ = _import_examples()
     
     model_type = "base" if is_base_model else "target"
     logger.info(f"Processing {model_type} model features")
@@ -487,4 +544,48 @@ def _process_base_responses_for_target_features(
         
         results.append(feature_results)
     
-    return results 
+    return results
+
+# Make this module runnable from command line
+if __name__ == "__main__":
+    # When run directly, set up the module to avoid import errors
+    import logging
+    import sys
+    import os
+    
+    # Add the parent directory to path if we're running this script directly
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    parent_dir = os.path.dirname(os.path.dirname(os.path.dirname(script_dir)))
+    if parent_dir not in sys.path:
+        sys.path.insert(0, parent_dir)
+    
+    # Configure logging
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger("capability_evaluation")
+    
+    # Print a message to indicate the module is running correctly
+    logger.info("Capability evaluation module loaded successfully")
+    logger.info("This module provides functions for evaluating model capabilities")
+    logger.info("To use: evaluate_feature_capability(base_model, target_model, interpreted_features, output_dir)")
+    
+    # Example of what interpreted_features might look like
+    example_feature = {
+        "features": [
+            {
+                "name": "step_by_step_reasoning",
+                "description": "Ability to solve problems step by step"
+            },
+            {
+                "name": "formal_logic",
+                "description": "Ability to reason using formal logic"
+            }
+        ]
+    }
+    
+    # Print example usage
+    logger.info("\nExample usage:")
+    logger.info('base_model = "gpt2"')
+    logger.info('target_model = "gpt2-medium"')
+    logger.info('evaluate_feature_capability(base_model, target_model, example_feature, "capability_results")')
+    
+    # Note: Not actually running the evaluation to avoid requiring model downloads 

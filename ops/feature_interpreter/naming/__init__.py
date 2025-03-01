@@ -1,8 +1,8 @@
 """
-Feature Naming Package.
+Feature naming and interpretation module.
 
-This package provides modules for naming and interpreting features
-based on activation differences between models.
+This module provides functions for identifying, naming, and interpreting
+distinctive features in neural networks.
 """
 
 from .differences import compute_activation_differences, analyze_output_differences

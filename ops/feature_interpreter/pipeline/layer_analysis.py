@@ -32,10 +32,11 @@ def compute_layer_similarities(activations: Dict[str, Any]) -> Dict[str, float]:
     sample_prompt = list(activations.keys())[0]
     sample_data = activations[sample_prompt]
     
-    # Extract layer names
+    # Extract layer names - handle both numpy arrays and torch tensors
     layer_names = []
     for key in sample_data["base_activations"].keys():
-        if isinstance(sample_data["base_activations"][key], np.ndarray):
+        base_act = sample_data["base_activations"][key]
+        if isinstance(base_act, (np.ndarray, torch.Tensor)):
             layer_names.append(key)
     
     logger.info(f"Found {len(layer_names)} layers to analyze")
@@ -50,6 +51,16 @@ def compute_layer_similarities(activations: Dict[str, Any]) -> Dict[str, float]:
             if layer in data["base_activations"] and layer in data["target_activations"]:
                 base_act = data["base_activations"][layer]
                 target_act = data["target_activations"][layer]
+                
+                # Convert torch tensors to numpy if needed
+                if isinstance(base_act, torch.Tensor):
+                    # First convert to float32 to handle bfloat16
+                    base_act = base_act.to(torch.float32)
+                    base_act = base_act.cpu().numpy() if base_act.device.type != 'cpu' else base_act.numpy()
+                if isinstance(target_act, torch.Tensor):
+                    # First convert to float32 to handle bfloat16
+                    target_act = target_act.to(torch.float32)
+                    target_act = target_act.cpu().numpy() if target_act.device.type != 'cpu' else target_act.numpy()
                 
                 # Ensure activations have the same shape
                 if base_act.shape == target_act.shape:
@@ -115,6 +126,11 @@ def create_layer_similarity_plot(
     layer_names = [layer[1] for layer in layers]
     similarities = [layer[2] for layer in layers]
     
+    # Find the maximum similarity value to use as the y-axis maximum
+    max_similarity = max(similarities) if similarities else 1.0
+    # Add a small padding (5%) above the maximum value for visual clarity
+    y_max = max_similarity * 1.05
+    
     # Create the plot with modern styling
     plt.figure(figsize=(12, 6))
     bars = plt.bar(
@@ -124,6 +140,9 @@ def create_layer_similarity_plot(
         alpha=0.8,
         width=0.7
     )
+    
+    # Set y-axis limit to the maximum similarity value with padding
+    plt.ylim(0, y_max)
     
     # Add grid for better readability
     plt.grid(axis='y', linestyle='--', alpha=0.7)
@@ -136,7 +155,7 @@ def create_layer_similarity_plot(
         height = bar.get_height()
         plt.text(
             bar.get_x() + bar.get_width()/2.,
-            height + 0.01,
+            height + (y_max * 0.01),  # Position text slightly above bar
             f'{height:.2f}',
             ha='center', 
             va='bottom',

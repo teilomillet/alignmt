@@ -10,9 +10,18 @@ import logging
 import os
 import json
 from typing import Dict, List
+from functools import lru_cache
 
 # Configure logging
 logger = logging.getLogger(__name__)
+
+# Track which prompts have been used
+_used_prompts = set()
+
+def reset_used_prompts():
+    """Reset the set of used prompts (useful for testing)"""
+    global _used_prompts
+    _used_prompts = set()
 
 def load_prompt_categories() -> Dict[str, List[str]]:
     """
@@ -69,6 +78,20 @@ def create_negative_version(prompt: str) -> str:
     
     return simplified.strip()
 
+# Define mappings between feature descriptions and reasoning categories as a module-level variable
+mapping_terms = {
+    "step_by_step_reasoning": ["step", "solve", "equation", "calculation", "work through"],
+    "chain_of_thought": ["chain", "thought", "step", "think through", "reason through"],
+    "formal_logic": ["logic", "valid", "syllogism", "premise", "conclusion", "formal"],
+    "causal_reasoning": ["causal", "cause", "effect", "correlation", "causation"],
+    "probabilistic_reasoning": ["probability", "chance", "odds", "bayes", "likelihood"],
+    "counterfactual_reasoning": ["counterfactual", "if", "would have", "alternate", "history"],
+    "analogical_reasoning": ["analogy", "similar", "compare", "contrast", "like"],
+    "abductive_reasoning": ["hypothesis", "explain", "observation", "phenomena", "plausible"],
+    "adversarial_reasoning": ["adversarial", "misleading", "trap", "trick", "error"],
+    "constraint_satisfaction": ["constraint", "restriction", "satisfy", "condition", "arrange"]
+}
+
 def map_feature_to_category(feature_name: str, feature_description: str) -> str:
     """
     Map a feature name/description to the most relevant reasoning category.
@@ -80,20 +103,6 @@ def map_feature_to_category(feature_name: str, feature_description: str) -> str:
     Returns:
         Name of the most relevant reasoning category
     """
-    # Define mappings between feature descriptions and reasoning categories
-    mapping_terms = {
-        "step_by_step_reasoning": ["step", "solve", "equation", "calculation", "work through"],
-        "chain_of_thought": ["chain", "thought", "step", "think through", "reason through"],
-        "formal_logic": ["logic", "valid", "syllogism", "premise", "conclusion", "formal"],
-        "causal_reasoning": ["causal", "cause", "effect", "correlation", "causation"],
-        "probabilistic_reasoning": ["probability", "chance", "odds", "bayes", "likelihood"],
-        "counterfactual_reasoning": ["counterfactual", "if", "would have", "alternate", "history"],
-        "analogical_reasoning": ["analogy", "similar", "compare", "contrast", "like"],
-        "abductive_reasoning": ["hypothesis", "explain", "observation", "phenomena", "plausible"],
-        "adversarial_reasoning": ["adversarial", "misleading", "trap", "trick", "error"],
-        "constraint_satisfaction": ["constraint", "restriction", "satisfy", "condition", "arrange"]
-    }
-    
     # Combine feature name and description for matching
     text = (feature_name + " " + feature_description).lower()
     
@@ -126,6 +135,8 @@ def generate_contrastive_examples(
     Returns:
         List of contrastive examples with positive and negative versions
     """
+    global _used_prompts
+    
     # Load prompt categories
     prompt_categories = load_prompt_categories()
     
@@ -134,15 +145,56 @@ def generate_contrastive_examples(
     
     # Attempt to use prompts from the mapped category
     if best_category in prompt_categories and prompt_categories[best_category]:
-        prompts = prompt_categories[best_category]
+        # Get all available prompts in this category
+        available_prompts = prompt_categories[best_category]
         
-        # If we need to limit the number of examples
-        if len(prompts) > num_examples:
-            prompts = prompts[:num_examples]
+        # Filter out prompts that have been used before
+        unused_prompts = [p for p in available_prompts if p not in _used_prompts]
+        
+        # If we've used all prompts in this category, try other categories or reset
+        if not unused_prompts:
+            logger.warning(f"All prompts in category '{best_category}' have been used. Trying fallback options.")
+            
+            # Try to find another relevant category
+            alternate_categories = []
+            for category, terms in mapping_terms.items():
+                if category != best_category:
+                    text = (feature_name + " " + feature_description).lower()
+                    score = sum(1 for term in terms if term.lower() in text)
+                    if score > 0:
+                        alternate_categories.append((category, score))
+            
+            # Sort by score in descending order
+            alternate_categories.sort(key=lambda x: x[1], reverse=True)
+            
+            # Try alternate categories
+            for alt_category, _ in alternate_categories:
+                if alt_category in prompt_categories and prompt_categories[alt_category]:
+                    alt_prompts = [p for p in prompt_categories[alt_category] if p not in _used_prompts]
+                    if alt_prompts:
+                        unused_prompts = alt_prompts
+                        logger.info(f"Using alternate category '{alt_category}' for feature '{feature_name}'")
+                        best_category = alt_category
+                        break
+            
+            # If still no unused prompts, use fallback templates
+            if not unused_prompts:
+                logger.warning(f"No unused prompts found in any relevant category. Using fallback examples for '{feature_name}'")
+                fallback_examples = _get_fallback_examples(feature_name, feature_description, num_examples)
+                for example in fallback_examples:
+                    _used_prompts.add(example["positive"])
+                return fallback_examples
+        
+        # Select prompts to use, prioritizing unused ones
+        selected_prompts = unused_prompts[:num_examples]
+        
+        # Mark these prompts as used
+        for prompt in selected_prompts:
+            _used_prompts.add(prompt)
         
         # Create contrastive examples
         contrastive_examples = []
-        for prompt in prompts:
+        for prompt in selected_prompts:
             contrastive_examples.append({
                 "positive": prompt,
                 "negative": create_negative_version(prompt),
@@ -154,6 +206,25 @@ def generate_contrastive_examples(
     # Fallback to the original implementation if category not found
     logger.warning(f"Category '{best_category}' not found in prompts.json or is empty, using fallback examples")
     
+    # Use fallback templates
+    fallback_examples = _get_fallback_examples(feature_name, feature_description, num_examples)
+    for example in fallback_examples:
+        _used_prompts.add(example["positive"])
+    return fallback_examples
+
+# Extract the fallback example code into a separate helper function
+def _get_fallback_examples(feature_name: str, feature_description: str, num_examples: int) -> List[Dict[str, str]]:
+    """
+    Get fallback examples when prompts from prompts.json are not available or have been used.
+    
+    Args:
+        feature_name: Name of the feature
+        feature_description: Description of the feature
+        num_examples: Number of examples to generate
+        
+    Returns:
+        List of contrastive examples with positive and negative versions
+    """
     # Map feature types to example templates (fallback)
     feature_templates = {
         "reasoning": [
